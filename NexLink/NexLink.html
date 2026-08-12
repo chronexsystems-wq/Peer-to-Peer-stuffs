@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexLink — High-Speed Transfer</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
+<style>
+/* ═══════════════════════════════════════════
+   GOOGLE FONTS
+═══════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS — LIGHT THEME ONLY
+═══════════════════════════════════════════ */
+:root {
+  --bg:          #f0f4ff;
+  --bg2:         #e8eeff;
+  --surface:     rgba(255,255,255,0.75);
+  --surface2:    rgba(255,255,255,0.55);
+  --surface3:    rgba(255,255,255,0.35);
+  --glass:       rgba(255,255,255,0.6);
+  --glass2:      rgba(255,255,255,0.85);
+  --border:      rgba(99,102,241,0.12);
+  --border2:     rgba(99,102,241,0.22);
+  --text:        #0f1135;
+  --text2:       #4b5280;
+  --text3:       #9699c4;
+
+  --blue:        #4f46e5;
+  --blue-h:      #3730a3;
+  --blue-glow:   rgba(79,70,229,0.28);
+  --blue-dim:    rgba(79,70,229,0.09);
+  --violet:      #7c3aed;
+  --violet-dim:  rgba(124,58,237,0.1);
+  --coral:       #f43f5e;
+  --coral-dim:   rgba(244,63,94,0.1);
+  --green:       #059669;
+  --green-glow:  rgba(5,150,105,0.25);
+  --green-dim:   rgba(5,150,105,0.1);
+  --amber:       #d97706;
+  --amber-dim:   rgba(217,119,6,0.1);
+  --red:         #dc2626;
+  --red-dim:     rgba(220,38,38,0.1);
+  --cyan:        #0891b2;
+  --cyan-dim:    rgba(8,145,178,0.1);
+
+  --r:           14px;
+  --r-sm:        8px;
+  --r-xs:        5px;
+  --shadow:      0 8px 40px rgba(79,70,229,0.13), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-sm:   0 2px 12px rgba(79,70,229,0.08);
+  --shadow-lg:   0 20px 60px rgba(79,70,229,0.18), 0 4px 16px rgba(0,0,0,0.08);
+  --font-mono:   'JetBrains Mono', monospace;
+}
+
+/* ═══════════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all .18s cubic-bezier(.4,0,.2,1);
+}
+input, select {
+  font-family: inherit;
+  outline: none;
+  border: none;
+  transition: all .18s ease;
+}
+select { cursor: pointer; }
+
+/* ═══════════════════════════════════════════
+   ANIMATED MESH BACKGROUND
+═══════════════════════════════════════════ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 10%, rgba(99,102,241,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 20%, rgba(124,58,237,0.1) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at 50% 90%, rgba(244,63,94,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(8,145,178,0.08) 0%, transparent 55%),
+    linear-gradient(135deg, #f0f4ff 0%, #e8eeff 50%, #f5f0ff 100%);
+  animation: meshShift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes meshShift {
+  0%   { filter: hue-rotate(0deg) brightness(1); }
+  50%  { filter: hue-rotate(8deg) brightness(1.02); }
+  100% { filter: hue-rotate(-6deg) brightness(0.99); }
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(99,102,241,0.08) 1px, transparent 0);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════
+   OVERLAY SYSTEM
+═══════════════════════════════════════════ */
+.overlay {
+  position: fixed; inset: 0; z-index: 800;
+  background: rgba(15,17,53,0.45);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.overlay.hidden { display: none; }
+
+/* ═══════════════════════════════════════════
+   NETWORK BLOCKER
+═══════════════════════════════════════════ */
+#networkBlocker { z-index: 900; flex-direction: column; }
+
+.nb-card {
+  background: var(--glass2);
+  border: 1px solid var(--border2);
+  border-radius: 24px;
+  padding: 3rem 3.5rem;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+}
+.nb-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--blue), var(--violet), var(--coral));
+  animation: shimmer 2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+.nb-logo {
+  font-size: 2.2rem; font-weight: 900; letter-spacing: -.06em;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1.75rem;
+}
+.nb-logo span { background: linear-gradient(135deg, var(--violet), var(--coral)); -webkit-background-clip: text; background-clip: text; }
+
+.spinner-ring {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid rgba(99,102,241,0.15);
+  border-top-color: var(--blue);
+  animation: spin .75s linear infinite;
+  margin: 0 auto 1.25rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.nb-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .4rem; }
+.nb-sub   { font-size: .82rem; color: var(--text2); }
+
+/* ═══════════════════════════════════════════
+   ADMIN PANEL
+═══════════════════════════════════════════ */
+#adminOverlay { z-index: 850; }
+
+.admin-card {
+  background: var(--glass2);
+  border: 1px solid var(--border2);
+  border-radius: 24px;
+  width: 100%; max-width: 540px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  animation: cardPop .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes cardPop {
+  from { opacity: 0; transform: scale(.92) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.admin-head {
+  padding: 2.25rem 2.5rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(79,70,229,0.06), rgba(124,58,237,0.04));
+  position: relative;
+}
+.admin-head::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--blue), var(--violet), var(--coral));
+}
+.admin-brand {
+  font-size: 1.75rem; font-weight: 900; letter-spacing: -.06em;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: .35rem;
+}
+.admin-brand span { background: linear-gradient(135deg, var(--violet), var(--coral)); -webkit-background-clip: text; background-clip: text; }
+.admin-tagline { font-size: .78rem; color: var(--text2); font-weight: 500; }
+.admin-body { padding: 2rem 2.5rem 2.25rem; }
+.admin-label {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--text3); margin-bottom: .85rem;
+}
+
+.station-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.5rem;
+}
+.station-card {
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  padding: 1.25rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .22s cubic-bezier(.4,0,.2,1);
+  background: var(--surface2);
+  backdrop-filter: blur(8px);
+  position: relative; overflow: hidden;
+}
+.station-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--blue-dim), var(--violet-dim));
+  opacity: 0; transition: opacity .22s;
+}
+.station-card:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.station-card:hover::after { opacity: 1; }
+.station-card.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-glow), var(--shadow-sm);
+  transform: translateY(-2px);
+}
+.station-card.selected::after { opacity: 1; }
+
+.sc-avatar {
+  width: 46px; height: 46px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff; font-weight: 800; font-size: .82rem;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto .85rem;
+  box-shadow: 0 6px 20px var(--blue-glow);
+  position: relative; z-index: 1;
+}
+.sc-name { font-weight: 700; font-size: .9rem; color: var(--text); margin-bottom: .2rem; position: relative; z-index: 1; }
+.sc-id   { font-size: .65rem; color: var(--text3); font-family: var(--font-mono); position: relative; z-index: 1; }
+
+.btn-launch {
+  width: 100%;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff; border-radius: var(--r);
+  padding: .9rem; font-size: .95rem; font-weight: 700;
+  box-shadow: 0 6px 24px var(--blue-glow);
+  letter-spacing: .01em;
+  position: relative; overflow: hidden;
+}
+.btn-launch::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0; transition: opacity .18s;
+}
+.btn-launch:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 32px var(--blue-glow); }
+.btn-launch:hover:not(:disabled)::after { opacity: 1; }
+.btn-launch:active:not(:disabled) { transform: translateY(0); }
+.btn-launch:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════
+   TOPBAR
+═══════════════════════════════════════════ */
+.topbar {
+  height: 58px;
+  background: var(--glass2);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex; align-items: center;
+  padding: 0 1.5rem; gap: 1rem;
+  position: relative; z-index: 50; flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(99,102,241,0.08), 0 2px 16px rgba(79,70,229,0.06);
+}
+.topbar::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1.5px;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--violet) 40%, var(--coral) 70%, transparent 100%);
+  opacity: .5;
+}
+
+.topbar-brand {
+  font-size: 1.2rem; font-weight: 900; letter-spacing: -.05em;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  flex-shrink: 0;
+}
+.topbar-brand span { background: linear-gradient(135deg, var(--violet), var(--coral)); -webkit-background-clip: text; background-clip: text; }
+.topbar-divider { width: 1px; height: 22px; background: var(--border2); }
+
+.station-pill {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--blue-dim);
+  border: 1px solid rgba(79,70,229,0.2);
+  border-radius: 999px;
+  padding: 4px 13px 4px 7px;
+  font-size: .75rem; font-weight: 700; color: var(--blue);
+  backdrop-filter: blur(8px);
+}
+.station-pill .pill-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 2px rgba(79,70,229,0.2), 0 0 8px var(--blue);
+  animation: pulseDot 2.5s ease-in-out infinite;
+}
+@keyframes pulseDot {
+  0%,100% { box-shadow: 0 0 0 2px rgba(79,70,229,0.2), 0 0 8px var(--blue); }
+  50%      { box-shadow: 0 0 0 4px rgba(79,70,229,0.12), 0 0 16px var(--blue); }
+}
+
+.topbar-net {
+  margin-left: auto; display: flex; align-items: center; gap: 6px;
+  font-size: .72rem; color: var(--text2); font-family: var(--font-mono);
+}
+.net-indicator {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green-glow);
+  animation: pulseDot 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.topbar-actions { display: flex; align-items: center; gap: 6px; }
+.tb-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text2);
+  font-size: .75rem; font-weight: 600;
+  padding: 5px 13px;
+  display: flex; align-items: center; gap: 6px;
+  backdrop-filter: blur(8px);
+}
+.tb-btn:hover { background: var(--glass); border-color: var(--border2); color: var(--text); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.tb-btn.active { background: var(--blue-dim); border-color: rgba(79,70,229,0.25); color: var(--blue); }
+.tb-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; z-index: 1; }
+.body { display: flex; flex: 1; overflow: hidden; }
+
+/* ═══════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════ */
+.sidebar {
+  width: 210px; flex-shrink: 0;
+  background: var(--glass);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sb-section { padding: .9rem 1rem; border-bottom: 1px solid var(--border); }
+.sb-label {
+  font-size: .62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--text3); margin-bottom: .65rem;
+}
+.station-list { display: flex; flex-direction: column; gap: 3px; }
+.st-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: .5rem .65rem; border-radius: var(--r-sm);
+  font-size: .8rem; transition: all .15s;
+}
+.st-item.is-self {
+  background: var(--blue-dim);
+  border: 1px solid rgba(79,70,229,0.15);
+}
+.st-item:not(.is-self):hover { background: rgba(255,255,255,0.5); }
+.st-avatar-sm {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .6rem; font-weight: 800; flex-shrink: 0;
+  background: rgba(255,255,255,0.6); color: var(--text2);
+  border: 1px solid var(--border);
+}
+.st-item.is-self .st-avatar-sm {
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff; border-color: transparent;
+  box-shadow: 0 3px 10px var(--blue-glow);
+}
+.st-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(0,0,0,0.1); flex-shrink: 0; margin-left: auto;
+  transition: all .3s;
+}
+.st-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+.st-dot.self   { background: var(--blue);  box-shadow: 0 0 6px var(--blue-glow); }
+.st-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.st-you {
+  font-size: .55rem; font-weight: 700; color: var(--blue);
+  background: var(--blue-dim); border-radius: 3px;
+  padding: 1px 5px; text-transform: uppercase; letter-spacing: .06em;
+}
+
+/* Stats */
+.stat-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat-box {
+  background: rgba(255,255,255,0.5);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: .65rem .5rem; text-align: center;
+  transition: all .2s;
+}
+.stat-box:hover { background: rgba(255,255,255,0.75); border-color: var(--border2); }
+.stat-num {
+  font-size: 1.35rem; font-weight: 900; font-family: var(--font-mono);
+  line-height: 1; margin-bottom: 3px;
+}
+.stat-num.blue  { color: var(--blue); }
+.stat-num.green { color: var(--green); }
+.stat-lbl { font-size: .58rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+
+/* Activity log */
+.sb-section.log-section {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; min-height: 0; padding-bottom: .9rem;
+}
+.log-box {
+  flex: 1; overflow-y: auto;
+  background: rgba(255,255,255,0.4);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: .5rem .65rem;
+  font-family: var(--font-mono); font-size: .6rem; line-height: 1.9; min-height: 0;
+}
+.log-box::-webkit-scrollbar { width: 3px; }
+.log-box::-webkit-scrollbar-track { background: transparent; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.le { display: block; color: var(--text3); }
+.le.ok   { color: var(--green); }
+.le.err  { color: var(--coral); }
+.le.info { color: var(--blue); }
+.le.warn { color: var(--amber); }
+
+/* ═══════════════════════════════════════════
+   MAIN CONTENT
+═══════════════════════════════════════════ */
+.main {
+  flex: 1; overflow-y: auto;
+  padding: 1.25rem; display: flex;
+  flex-direction: column; gap: 1.25rem; min-width: 0;
+}
+.main::-webkit-scrollbar { width: 5px; }
+.main::-webkit-scrollbar-track { background: transparent; }
+.main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ═══════════════════════════════════════════
+   PANEL / CARD
+═══════════════════════════════════════════ */
+.panel {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: box-shadow .2s, border-color .2s;
+}
+.panel:hover { border-color: var(--border2); box-shadow: var(--shadow-lg); }
+
+.panel-head {
+  display: flex; align-items: center; gap: 11px;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.3);
+}
+.ph-icon {
+  width: 32px; height: 32px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem; flex-shrink: 0;
+}
+.ph-icon.blue   { background: var(--blue-dim);   color: var(--blue); }
+.ph-icon.green  { background: var(--green-dim);  color: var(--green); }
+.ph-icon.cyan   { background: var(--cyan-dim);   color: var(--cyan); }
+.ph-icon.violet { background: var(--violet-dim); color: var(--violet); }
+.ph-title { font-size: .88rem; font-weight: 700; color: var(--text); }
+.ph-sub   { font-size: .68rem; color: var(--text2); margin-top: 1px; }
+.ph-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.panel-body { padding: 1.1rem 1.25rem; }
+
+/* ═══════════════════════════════════════════
+   GRID LAYOUT
+═══════════════════════════════════════════ */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════
+   DESTINATION SELECTOR
+═══════════════════════════════════════════ */
+.dest-label {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--text3); margin-bottom: .65rem;
+}
+.dest-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 1rem; }
+.dest-btn {
+  border: 1.5px solid var(--border); border-radius: var(--r-sm);
+  padding: .7rem .5rem; background: rgba(255,255,255,0.5);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  cursor: pointer; transition: all .2s cubic-bezier(.4,0,.2,1);
+  position: relative; overflow: hidden; backdrop-filter: blur(8px);
+}
+.dest-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--green-dim), rgba(5,150,105,0.05));
+  opacity: 0; transition: opacity .2s;
+}
+.dest-btn:hover:not(:disabled) { border-color: var(--border2); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.dest-btn.active {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2.5px rgba(5,150,105,0.2), var(--shadow-sm);
+  transform: translateY(-2px);
+}
+.dest-btn.active::before { opacity: 1; }
+.dest-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.dest-avatar {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .68rem; font-weight: 800; color: var(--text2);
+  transition: all .2s; position: relative; z-index: 1;
+}
+.dest-btn.active .dest-avatar {
+  background: linear-gradient(135deg, var(--green), #047857);
+  border-color: transparent; color: #fff;
+  box-shadow: 0 4px 14px var(--green-glow);
+}
+.dest-name   { font-size: .72rem; font-weight: 600; color: var(--text); position: relative; z-index: 1; }
+.dest-status { font-size: .6rem; font-weight: 700; color: var(--text3); position: relative; z-index: 1; }
+.dest-btn.active .dest-status { color: var(--green); }
+
+/* ═══════════════════════════════════════════
+   DROP ZONE
+═══════════════════════════════════════════ */
+.drop-zone {
+  border: 1.5px dashed var(--border2);
+  border-radius: var(--r);
+  padding: 1.75rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .25s cubic-bezier(.4,0,.2,1);
+  background: rgba(255,255,255,0.35);
+  position: relative; margin-bottom: .9rem;
+  min-height: 128px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4rem;
+  overflow: hidden;
+}
+.drop-zone::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--blue-dim), var(--violet-dim));
+  opacity: 0; transition: opacity .25s;
+}
+.drop-zone.drag-active {
+  border-color: var(--blue); border-style: solid;
+  transform: scale(1.01);
+  box-shadow: 0 0 0 4px var(--blue-glow), var(--shadow-sm);
+}
+.drop-zone.drag-active::before { opacity: 1; }
+.drop-zone.has-files { border-color: var(--green); border-style: solid; background: rgba(5,150,105,0.04); }
+.drop-zone.has-files::before { background: linear-gradient(135deg, var(--green-dim), rgba(5,150,105,0.03)); opacity: 1; }
+
+.dz-icon  { font-size: 1.6rem; line-height: 1; margin-bottom: .2rem; position: relative; z-index: 1; transition: transform .2s; }
+.drop-zone:hover .dz-icon { transform: scale(1.12) translateY(-2px); }
+.dz-text  { font-size: .82rem; color: var(--text2); line-height: 1.5; position: relative; z-index: 1; }
+.dz-text strong { color: var(--text); }
+.dz-sub   { font-size: .7rem; color: var(--text3); position: relative; z-index: 1; }
+.dz-file-count { font-size: .82rem; font-weight: 700; color: var(--green); position: relative; z-index: 1; }
+.dz-actions { display: flex; gap: 7px; margin-top: .5rem; position: relative; z-index: 1; }
+.dz-pick-btn {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-size: .75rem; font-weight: 600; padding: 5px 13px;
+  backdrop-filter: blur(8px);
+}
+.dz-pick-btn:hover { background: white; border-color: var(--blue); color: var(--blue); box-shadow: var(--shadow-sm); }
+
+/* ═══════════════════════════════════════════
+   FILE QUEUE
+═══════════════════════════════════════════ */
+.file-queue {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  overflow: hidden; margin-bottom: .9rem; display: none;
+  max-height: 180px; overflow-y: auto;
+  background: rgba(255,255,255,0.4); backdrop-filter: blur(8px);
+}
+.file-queue::-webkit-scrollbar { width: 3px; }
+.file-queue::-webkit-scrollbar-thumb { background: var(--border2); }
+.fq-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: .5rem .8rem; border-bottom: 1px solid var(--border);
+  font-size: .78rem; transition: background .12s;
+}
+.fq-item:last-child { border-bottom: none; }
+.fq-item:hover { background: rgba(255,255,255,0.6); }
+.fq-type {
+  font-size: .58rem; font-weight: 800; font-family: var(--font-mono);
+  padding: 2px 5px; border-radius: 4px;
+  background: var(--blue-dim); color: var(--blue);
+  flex-shrink: 0; min-width: 34px; text-align: center;
+}
+.fq-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--text); }
+.fq-size { font-size: .65rem; color: var(--text3); font-family: var(--font-mono); white-space: nowrap; }
+.fq-status { font-size: .65rem; font-weight: 700; white-space: nowrap; min-width: 72px; text-align: right; }
+.fq-status.pending { color: var(--text3); }
+.fq-status.sending { color: var(--blue); }
+.fq-status.done    { color: var(--green); }
+.fq-status.failed  { color: var(--coral); }
+
+/* ═══════════════════════════════════════════
+   SEND BUTTON + PROGRESS
+═══════════════════════════════════════════ */
+.send-btn {
+  width: 100%;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff; border-radius: var(--r);
+  padding: .85rem 1.5rem; font-size: .95rem; font-weight: 700;
+  letter-spacing: .01em;
+  box-shadow: 0 6px 24px var(--blue-glow);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  position: relative; overflow: hidden;
+}
+.send-btn::before {
+  content: '';
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left .5s ease;
+}
+.send-btn:hover:not(:disabled)::before { left: 150%; }
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 36px var(--blue-glow);
+}
+.send-btn:active:not(:disabled) { transform: translateY(0); }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+
+.prog-wrap { margin-top: .9rem; display: none; }
+.prog-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: .45rem;
+}
+.prog-filename { font-size: .72rem; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+.prog-pct { font-size: .75rem; font-weight: 700; font-family: var(--font-mono); color: var(--blue); }
+.prog-track {
+  height: 6px; background: rgba(79,70,229,0.1); border-radius: 999px; overflow: hidden; margin-bottom: .4rem;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+.prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), var(--violet), var(--coral));
+  background-size: 200% 100%;
+  border-radius: 999px; width: 0%;
+  transition: width .12s linear;
+  animation: flowGrad 2s linear infinite;
+  box-shadow: 0 0 8px var(--blue-glow);
+}
+@keyframes flowGrad {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.prog-meta {
+  display: flex; justify-content: space-between;
+  font-size: .65rem; color: var(--text3); font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════
+   INBOX
+═══════════════════════════════════════════ */
+.inbox-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 380px; overflow-y: auto;
+  padding: .85rem;
+}
+.inbox-list::-webkit-scrollbar { width: 3px; }
+.inbox-list::-webkit-scrollbar-thumb { background: var(--border2); }
+.inbox-empty {
+  padding: 3rem 1rem; text-align: center; color: var(--text3);
+  font-size: .82rem; line-height: 1.7;
+}
+.inbox-empty .ie-icon { font-size: 2rem; margin-bottom: .75rem; display: block; opacity: .35; }
+
+.inbox-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: .7rem .9rem;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  transition: all .18s; backdrop-filter: blur(8px);
+}
+.inbox-item:hover { background: rgba(255,255,255,0.8); border-color: var(--border2); transform: translateX(2px); box-shadow: var(--shadow-sm); }
+.inbox-item.new-file {
+  border-color: rgba(5,150,105,0.35);
+  background: rgba(5,150,105,0.06);
+  animation: slideInItem .35s cubic-bezier(.34,1.56,.64,1), fadeToNormal 3s 1s ease forwards;
+}
+@keyframes slideInItem {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeToNormal {
+  to { border-color: var(--border); background: rgba(255,255,255,0.55); }
+}
+
+.ii-type {
+  font-size: .55rem; font-weight: 800; font-family: var(--font-mono);
+  padding: 3px 6px; border-radius: 5px;
+  background: var(--blue-dim); color: var(--blue); flex-shrink: 0;
+}
+.ii-info { flex: 1; min-width: 0; }
+.ii-name { font-size: .82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ii-meta { font-size: .65rem; color: var(--text3); margin-top: 2px; }
+.ii-save {
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text2); font-size: .7rem; font-weight: 700;
+  padding: 4px 10px; flex-shrink: 0;
+}
+.ii-save:hover { background: var(--blue); border-color: var(--blue); color: #fff; transform: translateY(-1px); box-shadow: 0 3px 10px var(--blue-glow); }
+
+/* ═══════════════════════════════════════════
+   NETWORK STATUS PANEL
+═══════════════════════════════════════════ */
+.net-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.net-station {
+  display: flex; align-items: center; gap: 10px;
+  padding: .8rem 1rem;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.4); backdrop-filter: blur(8px);
+  transition: all .2s;
+}
+.net-station.online {
+  border-color: rgba(5,150,105,0.28);
+  background: rgba(5,150,105,0.06);
+  box-shadow: 0 0 0 1px rgba(5,150,105,0.1);
+}
+.net-station.is-self {
+  border-color: rgba(79,70,229,0.25);
+  background: rgba(79,70,229,0.06);
+}
+.ns-avatar {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem; font-weight: 800; flex-shrink: 0;
+  background: rgba(255,255,255,0.7); color: var(--text2);
+  border: 1px solid var(--border); transition: all .2s;
+}
+.net-station.online .ns-avatar {
+  background: linear-gradient(135deg, var(--green), #047857);
+  border-color: transparent; color: #fff;
+  box-shadow: 0 4px 14px var(--green-glow);
+}
+.net-station.is-self .ns-avatar {
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  border-color: transparent; color: #fff;
+  box-shadow: 0 4px 14px var(--blue-glow);
+}
+.ns-info { flex: 1; min-width: 0; }
+.ns-name  { font-size: .82rem; font-weight: 700; color: var(--text); }
+.ns-state { font-size: .65rem; color: var(--text3); margin-top: 2px; }
+.net-station.online .ns-state  { color: var(--green); }
+.net-station.is-self .ns-state { color: var(--blue); }
+.ns-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(0,0,0,0.1); flex-shrink: 0; transition: all .3s;
+}
+.net-station.online .ns-dot  { background: var(--green); box-shadow: 0 0 8px var(--green-glow); animation: pulseDot 2.5s ease-in-out infinite; }
+.net-station.is-self .ns-dot { background: var(--blue);  box-shadow: 0 0 8px var(--blue-glow);  animation: pulseDot 2.5s ease-in-out infinite; }
+
+/* Speed metrics */
+.speed-bar {
+  display: flex; gap: 0; margin-top: 10px;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  font-family: var(--font-mono); font-size: .7rem; overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+.speed-metric {
+  display: flex; flex-direction: column; gap: 3px; flex: 1;
+  padding: .7rem .85rem;
+  border-right: 1px solid var(--border);
+  transition: background .15s;
+}
+.speed-metric:last-child { border-right: none; }
+.speed-metric:hover { background: rgba(255,255,255,0.65); }
+.speed-metric .sm-label { color: var(--text3); font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; }
+.speed-metric .sm-val   { color: var(--text); font-weight: 700; font-size: .78rem; }
+.speed-metric .sm-val.blue  { color: var(--blue); }
+.speed-metric .sm-val.green { color: var(--green); }
+.speed-metric .sm-val.cyan  { color: var(--cyan); }
+
+/* ═══════════════════════════════════════════
+   SETTINGS PANEL
+═══════════════════════════════════════════ */
+.settings-panel {
+  position: fixed; top: 0; right: -400px;
+  width: 375px; height: 100vh;
+  background: var(--glass2);
+  border-left: 1px solid var(--border);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  z-index: 300; transition: right .28s cubic-bezier(.4,0,.2,1);
+  display: flex; flex-direction: column;
+  box-shadow: -12px 0 48px rgba(79,70,229,0.1);
+}
+.settings-panel.open { right: 0; }
+
+.sp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem 1.35rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  background: rgba(255,255,255,0.4);
+}
+.sp-title { font-size: .95rem; font-weight: 700; }
+.sp-x {
+  width: 28px; height: 28px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,0.6); border: 1px solid var(--border);
+  color: var(--text2); font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.sp-x:hover { background: var(--red-dim); border-color: var(--coral); color: var(--coral); }
+.sp-body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+.sp-section { margin-bottom: 1.35rem; }
+.sp-section-title {
+  font-size: .62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--text3); margin-bottom: .7rem;
+  padding-bottom: .55rem; border-bottom: 1px solid var(--border);
+}
+.sp-row { display: flex; align-items: center; gap: 8px; margin-bottom: .5rem; }
+.sp-row-label { font-size: .78rem; font-weight: 600; color: var(--text2); flex-shrink: 0; width: 80px; }
+.sp-input {
+  flex: 1; background: rgba(255,255,255,0.6); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text); font-size: .82rem; padding: .48rem .75rem;
+}
+.sp-input:focus { border-color: var(--blue); background: white; box-shadow: 0 0 0 3px var(--blue-glow); }
+.sp-save {
+  width: 100%;
+  background: linear-gradient(135deg, var(--green), #047857);
+  color: #fff; border-radius: var(--r-sm); padding: .6rem;
+  font-size: .85rem; font-weight: 700; margin-top: .5rem;
+  box-shadow: 0 4px 14px var(--green-glow);
+}
+.sp-save:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--green-glow); }
+.sp-hint { font-size: .68rem; color: var(--text3); margin-top: .4rem; }
+.sp-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .55rem .85rem;
+  background: rgba(255,255,255,0.5); border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+.sp-toggle-label { font-size: .82rem; color: var(--text2); font-weight: 500; }
+.toggle-btn {
+  background: rgba(255,255,255,0.7); border: 1px solid var(--border);
+  border-radius: var(--r-xs); color: var(--text); font-size: .75rem; font-weight: 600; padding: 4px 11px;
+}
+.toggle-btn:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+.save-loc-btn {
+  background: rgba(255,255,255,0.6); border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-size: .82rem; font-weight: 600; padding: .55rem .9rem;
+  width: 100%; text-align: left; display: flex; align-items: center; gap: 8px; margin-bottom: .4rem;
+}
+.save-loc-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.save-loc-btn.set { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+
+/* RX Progress bar in inbox */
+.rx-prog-wrap {
+  display: none;
+  padding: .65rem 1.25rem .5rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5,150,105,0.04);
+}
+.prog-fill.rx {
+  background: linear-gradient(90deg, var(--green), #047857, var(--cyan));
+  background-size: 200% 100%;
+  animation: flowGrad 2s linear infinite;
+  box-shadow: 0 0 8px var(--green-glow);
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT FIXES — everything fits in one page
+═══════════════════════════════════════════ */
+
+/* Main scrolls internally, panels don't push out */
+.main {
+  flex: 1; overflow: hidden;
+  padding: .9rem; display: flex;
+  flex-direction: column; gap: .75rem; min-width: 0;
+}
+
+/* Top row: send + inbox take half the remaining height each */
+.grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .75rem;
+  flex: 1; min-height: 0; overflow: hidden;
+}
+.grid-2 .panel { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.grid-2 .panel .panel-body { flex: 1; overflow: hidden; min-height: 0; }
+
+/* Bottom network panel — compact, fixed height */
+.panel.net-panel { flex-shrink: 0; }
+.net-panel .panel-body { padding: .7rem 1rem; }
+.net-panel .net-grid { grid-template-columns: repeat(4,1fr); gap: 6px; }
+.net-panel .net-station { padding: .55rem .7rem; gap: 7px; }
+.net-panel .ns-avatar { width: 30px; height: 30px; border-radius: 8px; font-size: .62rem; }
+.net-panel .ns-name { font-size: .75rem; }
+.net-panel .ns-state { font-size: .6rem; }
+.net-panel .speed-bar { margin-top: 7px; }
+.net-panel .speed-metric { padding: .5rem .7rem; }
+.net-panel .sm-val { font-size: .72rem; }
+
+/* Drop zone — smaller */
+.drop-zone { min-height: 90px; padding: 1rem .75rem; }
+.dz-icon { font-size: 1.3rem; }
+
+/* File queue — scrolls inside send panel, doesn't push */
+.file-queue { max-height: 100px; }
+
+/* Send panel body scrolls if needed */
+#appShell .panel .panel-body { padding: .8rem 1rem; }
+
+/* Inbox list scrolls */
+.inbox-list { max-height: unset; height: 100%; overflow-y: auto; padding: .6rem; }
+.inbox-item { padding: .5rem .75rem; }
+
+/* ═══════════════════════════════════════════
+   SCROLLBAR GLOBAL
+═══════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════
+   REDUCED MOTION
+═══════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     NETWORK BLOCKER
+═══════════════════════════════════════════ -->
+<div class="overlay hidden" id="networkBlocker">
+  <div class="nb-card">
+    <div class="nb-logo">Nex<span>Link</span></div>
+    <div class="spinner-ring"></div>
+    <div class="nb-title">Establishing Secure Mesh</div>
+    <div class="nb-sub">Connecting to all stations on the network…</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     ADMIN PANEL
+═══════════════════════════════════════════ -->
+<div class="overlay" id="adminOverlay">
+  <div class="admin-card">
+    <div class="admin-head">
+      <div class="admin-brand">Nex<span>Link</span></div>
+      <div class="admin-tagline">High-Speed Mesh Transfer System &nbsp;·&nbsp; Select your workstation</div>
+    </div>
+    <div class="admin-body">
+      <div class="admin-label">Workstation Identity</div>
+      <div class="station-grid" id="adminGrid"></div>
+      <button class="btn-launch" id="adminConfirm" onclick="confirmStation()" disabled>
+        Launch NexLink →
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SETTINGS PANEL
+═══════════════════════════════════════════ -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="sp-head">
+    <span class="sp-title">Settings</span>
+    <button class="sp-x" onclick="toggleSettings()">×</button>
+  </div>
+  <div class="sp-body">
+    <div class="sp-section">
+      <div class="sp-section-title">Station Names</div>
+      <div id="nameEditors"></div>
+      <button class="sp-save" onclick="saveNames()">Save &amp; Broadcast to All</button>
+      <div class="sp-hint">Name changes sync instantly to all connected stations.</div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-section-title">Auto-Save Location</div>
+      <button class="save-loc-btn" id="saveLocBtn" onclick="setDownloadLocation()">
+        <span>📁</span>
+        <span id="saveLocLabel">Choose default save folder…</span>
+      </button>
+      <div class="sp-hint">Received files save automatically to this folder without prompts.</div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-section-title">Appearance</div>
+      <div class="sp-toggle">
+        <span class="sp-toggle-label">Theme (Light)</span>
+        <button class="toggle-btn" onclick="toggleLight()">Toggle</button>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-section-title">Session</div>
+      <button class="sp-save" style="background:var(--red);" onclick="resetStation()">Reset Station Identity</button>
+      <div class="sp-hint">Clears saved station. You'll see the setup screen on next open.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════ -->
+<div class="app" id="appShell" style="display:none">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-brand">Nex<span>Link</span></div>
+    <div class="topbar-divider"></div>
+    <div class="station-pill" id="stationPill">
+      <span class="pill-dot"></span>
+      <span id="pillName">—</span>
+    </div>
+
+    <div class="topbar-net" id="netStatus">
+      <span class="net-indicator" id="netDot"></span>
+      <span id="netLabel">0 / 3 online</span>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="tb-btn" onclick="setDownloadLocation()" id="topSaveBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Save Folder
+      </button>
+      <button class="tb-btn" onclick="toggleSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></svg>
+        Settings
+      </button>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <div class="sb-section">
+        <div class="sb-label">Stations</div>
+        <div class="station-list" id="stationList"></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Network</div>
+        <div class="stat-strip">
+          <div class="stat-box">
+            <div class="stat-num green" id="statOnline">0</div>
+            <div class="stat-lbl">Online</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num blue" id="statTotal">4</div>
+            <div class="stat-lbl">Total</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-section log-section">
+        <div class="sb-label">Activity Log</div>
+        <div class="log-box" id="logBox"></div>
+      </div>
+
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- TOP ROW: Send + Inbox -->
+      <div class="grid-2">
+
+        <!-- SEND PANEL -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ph-icon blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </div>
+            <div>
+              <div class="ph-title">Send Files</div>
+              <div class="ph-sub">Drag, drop and transmit to any station</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="dest-label">Destination</div>
+            <div class="dest-grid" id="destGrid"></div>
+
+            <div class="drop-zone" id="dropZone"
+                 ondragover="onDragOver(event)"
+                 ondragleave="onDragLeave(event)"
+                 ondrop="onDrop(event)">
+              <div class="dz-icon">📂</div>
+              <div class="dz-text"><strong>Drop files or folders here</strong></div>
+              <div class="dz-sub">or select manually below</div>
+              <div class="dz-actions">
+                <button class="dz-pick-btn" onclick="document.getElementById('fileInput').click()">Files</button>
+                <button class="dz-pick-btn" onclick="document.getElementById('folderInput').click()">Folder</button>
+              </div>
+              <div class="dz-file-count" id="dzCount" style="display:none"></div>
+              <input type="file" id="fileInput" multiple onchange="onFileSelected(event)" style="display:none" />
+              <input type="file" id="folderInput" webkitdirectory onchange="onFileSelected(event)" style="display:none" />
+            </div>
+
+            <div class="file-queue" id="fileQueue"></div>
+
+            <button class="send-btn" id="sendBtn" onclick="sendFiles()" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              Transmit
+            </button>
+
+            <div class="prog-wrap" id="progWrap">
+              <div class="prog-header">
+                <span class="prog-filename" id="progFile">—</span>
+                <span class="prog-pct" id="progPct">0%</span>
+              </div>
+              <div class="prog-track">
+                <div class="prog-fill" id="progFill"></div>
+              </div>
+              <div class="prog-meta">
+                <span id="progSpeed">— MB/s</span>
+                <span id="progEta">ETA: —</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INBOX PANEL -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ph-icon green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </div>
+            <div>
+              <div class="ph-title">Inbox</div>
+              <div class="ph-sub">Files received from the network</div>
+            </div>
+            <div class="ph-right">
+              <button class="tb-btn" onclick="clearInbox()">Clear</button>
+            </div>
+          </div>
+          <!-- RX Progress bar — mirrors TX, shown during receive -->
+          <div class="rx-prog-wrap" id="rxProgWrap">
+            <div class="prog-header">
+              <span class="prog-filename" id="rxProgFile">—</span>
+              <span class="prog-pct" id="rxProgPct">0%</span>
+            </div>
+            <div class="prog-track">
+              <div class="prog-fill rx" id="rxProgFill"></div>
+            </div>
+            <div class="prog-meta">
+              <span id="rxProgSpeed">—</span>
+              <span id="rxProgEta">ETA: —</span>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <div class="inbox-list" id="inboxList">
+              <div class="inbox-empty">
+                <span class="ie-icon">📭</span>
+                No files received yet.<br>
+                <span style="font-size:.75rem">Transfers will appear here instantly.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- BOTTOM: Network Status -->
+      <div class="panel net-panel">
+        <div class="panel-head">
+          <div class="ph-icon cyan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="2"/><path d="M4.93 4.93a10 10 0 000 14.14M19.07 4.93a10 10 0 010 14.14M7.76 7.76a6 6 0 000 8.48M16.24 7.76a6 6 0 010 8.48"/></svg>
+          </div>
+          <div>
+            <div class="ph-title">Network Mesh</div>
+            <div class="ph-sub">Live station connectivity</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="net-grid" id="netGrid"></div>
+          <div class="speed-bar" id="speedBar">
+            <div class="speed-metric">
+              <span class="sm-label">TX Speed</span>
+              <span class="sm-val blue" id="smTx">—</span>
+            </div>
+            <div class="speed-metric">
+              <span class="sm-label">RX Speed</span>
+              <span class="sm-val green" id="smRx">—</span>
+            </div>
+            <div class="speed-metric">
+              <span class="sm-label">Session Sent</span>
+              <span class="sm-val cyan" id="smSent">0 MB</span>
+            </div>
+            <div class="speed-metric">
+              <span class="sm-label">Session Received</span>
+              <span class="sm-val cyan" id="smRecv">0 MB</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   CONFIG — 4 GB-OPTIMISED STATIONS
+══════════════════════════════════════════════════════════ */
+const DEFAULT_STATIONS = [
+  { id: 'MAC',       name: 'Mac',        abbr: 'MC' },
+  { id: 'ALL_IN_ONE',name: 'All in One', abbr: 'AI' },
+  { id: 'EXTRA',     name: 'Extra',      abbr: 'EX' },
+  { id: 'FRCC',      name: 'FRCC',       abbr: 'FR' },
+];
+
+/* ── Transfer tuning — MAX SPEED, raw binary ── */
+const CHUNK_SIZE      = 256 * 1024;        // 256 KB — matches AERO_FLY, optimal for WebRTC
+const MAX_BUFFERED    = 4   * 1024 * 1024; // 4 MB drain threshold — tight keeps throughput smooth
+const DRAIN_MS        = 8;                  // 8ms polling
+const PIPELINE        = 32;                 // 32 chunks pre-read from disk
+const CHUNKS_PER_TICK = 8;                 // 8 chunks per event loop tick
+
+/* ── Heartbeat ── */
+const HEARTBEAT_MS = 5000;
+
+
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+let stations   = JSON.parse(localStorage.getItem('nl_stations') || 'null') || DEFAULT_STATIONS.map(s=>({...s}));
+let myStation  = null;
+let peer       = null;
+let conns      = {};
+let onlineSet  = new Set();
+let lastSeen   = {};
+
+let selectedTarget = null;
+let selectedFiles  = [];
+
+let rxState    = {};
+let pendingAcks = {}; // tracks status UI elements only — no timers
+let heartbeatTimer = null;
+let downloadDir = null;
+
+/* Session stats */
+let sessionTxBytes = 0, sessionRxBytes = 0;
+let txSpeedBytes = 0, rxSpeedBytes = 0;
+let lastSpeedTime = Date.now();
+setInterval(updateSpeed, 1000);
+
+/* ══════════════════════════════════════════════════════════
+   LOG
+══════════════════════════════════════════════════════════ */
+function log(msg, type='') {
+  const el = document.getElementById('logBox');
+  if (!el) return;
+  const e  = document.createElement('span');
+  e.className = 'le ' + type;
+  const ts = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  e.textContent = `[${ts}] ${msg}`;
+  el.appendChild(e);
+  el.appendChild(document.createElement('br'));
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN PANEL
+══════════════════════════════════════════════════════════ */
+function buildAdminGrid() {
+  const g = document.getElementById('adminGrid');
+  g.innerHTML = '';
+  stations.forEach(st => {
+    const c = document.createElement('div');
+    c.className = 'station-card';
+    c.innerHTML = `
+      <div class="sc-avatar">${st.abbr}</div>
+      <div class="sc-name">${st.name}</div>
+      <div class="sc-id">${st.id}</div>
+    `;
+    c.onclick = () => {
+      document.querySelectorAll('.station-card').forEach(x => x.classList.remove('selected'));
+      c.classList.add('selected');
+      myStation = st;
+      document.getElementById('adminConfirm').disabled = false;
+    };
+    g.appendChild(c);
+  });
+}
+
+function confirmStation() {
+  if (!myStation) return;
+  localStorage.setItem('nl_mystation', JSON.stringify(myStation));
+  document.getElementById('adminOverlay').classList.add('hidden');
+  launchApp();
+}
+
+function launchApp() {
+  document.getElementById('appShell').style.display = '';
+  document.getElementById('pillName').textContent   = myStation.name;
+  document.getElementById('networkBlocker').classList.remove('hidden');
+  initUI();
+  initPeer();
+}
+
+/* ══════════════════════════════════════════════════════════
+   UI INIT
+══════════════════════════════════════════════════════════ */
+function initUI() {
+  buildSidebar();
+  buildDestGrid();
+  buildNetGrid();
+  buildNameEditors();
+}
+
+function buildSidebar() {
+  const list = document.getElementById('stationList');
+  list.innerHTML = '';
+  stations.forEach(st => {
+    const row = document.createElement('div');
+    row.className = 'st-item' + (st.id === myStation.id ? ' is-self' : '');
+    row.id = 'si_' + st.id;
+    row.innerHTML = `
+      <div class="st-avatar-sm">${st.abbr}</div>
+      <span class="st-name">${st.name}</span>
+      ${st.id === myStation.id
+        ? '<span class="st-you">YOU</span>'
+        : `<span class="st-dot" id="dot_${st.id}"></span>`}
+    `;
+    list.appendChild(row);
+  });
+}
+
+function buildDestGrid() {
+  const g = document.getElementById('destGrid');
+  g.innerHTML = '';
+  stations.forEach(st => {
+    if (st.id === myStation.id) return;
+    const btn = document.createElement('button');
+    btn.className = 'dest-btn';
+    btn.id = 'db_' + st.id;
+    btn.disabled = true;
+    btn.innerHTML = `
+      <div class="dest-avatar">${st.abbr}</div>
+      <div class="dest-name">${st.name}</div>
+      <div class="dest-status" id="dbs_${st.id}">Offline</div>
+    `;
+    btn.onclick = () => selectTarget(st.id);
+    g.appendChild(btn);
+  });
+}
+
+function buildNetGrid() {
+  const g = document.getElementById('netGrid');
+  g.innerHTML = '';
+  stations.forEach(st => {
+    const box = document.createElement('div');
+    box.className = 'net-station' + (st.id === myStation.id ? ' is-self' : '');
+    box.id = 'ns_' + st.id;
+    box.innerHTML = `
+      <div class="ns-avatar">${st.abbr}</div>
+      <div class="ns-info">
+        <div class="ns-name">${st.name}</div>
+        <div class="ns-state" id="nsst_${st.id}">${st.id === myStation.id ? 'This PC' : 'Offline'}</div>
+      </div>
+      <div class="ns-dot" id="nsdot_${st.id}"></div>
+    `;
+    g.appendChild(box);
+  });
+}
+
+function buildNameEditors() {
+  const w = document.getElementById('nameEditors');
+  w.innerHTML = '';
+  stations.forEach(st => {
+    const row = document.createElement('div');
+    row.className = 'sp-row';
+    row.innerHTML = `
+      <span class="sp-row-label">${st.abbr}</span>
+      <input class="sp-input" id="ne_${st.id}" value="${st.name}" />
+    `;
+    w.appendChild(row);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   PEER INIT — FULL MESH
+══════════════════════════════════════════════════════════ */
+function initPeer() {
+  peer = new Peer(myStation.id, {
+    config: { iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    ]}
+  });
+
+  peer.on('open', id => {
+    document.getElementById('networkBlocker').classList.add('hidden');
+    log('Online as ' + id, 'ok');
+    startHeartbeat();
+    stations.forEach(st => { if (st.id !== myStation.id) probeStation(st.id); });
+  });
+
+  peer.on('disconnected', () => {
+    log('Signaling lost — reconnecting…', 'warn');
+    document.getElementById('networkBlocker').classList.remove('hidden');
+    peer.reconnect();
+  });
+
+  peer.on('connection', c => setupConn(c, c.peer));
+
+  peer.on('error', err => {
+    if (err.type !== 'peer-unavailable') log('Error: ' + err.message, 'err');
+    if (['network','server-error','unavailable-id'].includes(err.type))
+      document.getElementById('networkBlocker').classList.remove('hidden');
+  });
+}
+
+window.addEventListener('beforeunload', () => { if (peer) peer.destroy(); });
+
+function probeStation(stId) {
+  if (conns[stId]?.open) return;
+  if (conns[stId]) { conns[stId].close(); delete conns[stId]; }
+  const c = peer.connect(stId, { reliable: true, config: { sdpSemantics: 'unified-plan' } });
+  c.on('open', () => setupConn(c, stId));
+  c.on('error', () => setTimeout(() => probeStation(stId), 5000));
+}
+
+function setupConn(c, stId) {
+  // Deduplicate connections — higher ID wins
+  if (conns[stId]?.open && conns[stId] !== c) {
+    if (myStation.id > stId) { c.close(); return; }
+    else conns[stId].close();
+  }
+  conns[stId] = c;
+  onlineSet.add(stId);
+  lastSeen[stId] = Date.now();
+  setOnline(stId, true);
+  log(stationName(stId) + ' connected.', 'ok');
+  c.on('data', data => handleData(data, stId));
+  c.on('close', () => handleDisconnect(stId));
+}
+
+function handleDisconnect(stId) {
+  delete conns[stId];
+  onlineSet.delete(stId);
+  setOnline(stId, false);
+  log(stationName(stId) + ' offline.', 'warn');
+  setTimeout(() => probeStation(stId), 5000);
+}
+
+function setOnline(stId, online) {
+  /* sidebar dot */
+  const dot = document.getElementById('dot_' + stId);
+  if (dot) dot.className = 'st-dot' + (online ? ' online' : '');
+  /* dest button */
+  const db = document.getElementById('db_' + stId);
+  if (db) {
+    db.disabled = !online;
+    db.querySelector('.dest-status').textContent = online ? 'Online' : 'Offline';
+  }
+  /* net grid */
+  const ns = document.getElementById('ns_' + stId);
+  if (ns) ns.className = 'net-station' + (online ? ' online' : '');
+  const nsst = document.getElementById('nsst_' + stId);
+  if (nsst) nsst.textContent = online ? 'Online' : 'Offline';
+  const nsdot = document.getElementById('nsdot_' + stId);
+  if (nsdot) nsdot.className = 'ns-dot' + (online ? ' online' : '');
+  /* topbar + stats */
+  updateNetStats();
+}
+
+function updateNetStats() {
+  const n = onlineSet.size;
+  const total = stations.length - 1;
+  document.getElementById('statOnline').textContent = n;
+  document.getElementById('netLabel').textContent   = `${n} / ${total} online`;
+  const indicator = document.getElementById('netDot');
+  if (indicator) {
+    indicator.style.background = n === total ? 'var(--green)' : n > 0 ? 'var(--amber)' : 'var(--red)';
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   HEARTBEAT
+══════════════════════════════════════════════════════════ */
+function startHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => {
+    stations.forEach(st => {
+      if (st.id === myStation.id) return;
+      const c = conns[st.id];
+      if (c?.open) {
+        c.send({ type: 'ping' });
+        // Only check timeout when the data channel is idle (no buffered data = no active transfer)
+        // No idle timeout — connections stay open indefinitely
+      } else probeStation(st.id);
+    });
+  }, HEARTBEAT_MS);
+}
+
+/* ══════════════════════════════════════════════════════════
+   DATA HANDLER
+══════════════════════════════════════════════════════════ */
+async function handleData(data, fromId) {
+  lastSeen[fromId] = Date.now();
+
+  // Raw ArrayBuffer = file chunk (sent without wrapper for max speed, no MessagePack overhead)
+  if (data instanceof ArrayBuffer) {
+    const rx = rxState[fromId];
+    if (!rx || rx.failed) return;
+    rx.bytes += data.byteLength;
+    rxSpeedBytes   += data.byteLength;
+    sessionRxBytes += data.byteLength;
+    if (rx.streaming) {
+      rx.writeChain = rx.writeChain
+        .then(() => rx.writable.write(data))
+        .catch(e => { rx.failed = true; log(`Disk write error: ${e.message}`, 'err'); });
+    } else {
+      rx.chunks.push(data);
+    }
+    // Update RX progress bar
+    if (rx.meta?.size) {
+      const pct = Math.min(100, Math.round(rx.bytes / rx.meta.size * 100));
+      document.getElementById('rxProgFill').style.width = pct + '%';
+      document.getElementById('rxProgPct').textContent  = pct + '%';
+      const dt = (Date.now() - rx.t0) / 1000;
+      if (dt > 0) {
+        const spd = rx.bytes / dt;
+        document.getElementById('rxProgSpeed').textContent = fmtSize(spd) + '/s';
+        const rem = rx.meta.size - rx.bytes;
+        document.getElementById('rxProgEta').textContent = 'ETA: ' + fmtETA(rem, spd);
+      }
+    }
+    return;
+  }
+
+  if (data.type === 'ping') { conns[fromId]?.send({ type:'pong' }); return; }
+  if (data.type === 'pong') { return; }
+
+  if (data.type === 'file_meta') {
+    // Start receive — stream directly to disk if save folder is set, else buffer in memory
+    const meta = data;
+    const displayName = meta.filename.split('/').pop();
+    const rx = { meta, chunks: [], bytes: 0, t0: Date.now(), streaming: false, writable: null, writeChain: Promise.resolve(), failed: false };
+    rxState[fromId] = rx;
+
+    // Show RX progress bar
+    document.getElementById('rxProgWrap').style.display = 'block';
+    document.getElementById('rxProgFile').textContent   = `[RX] ${displayName}`;
+    document.getElementById('rxProgFill').style.width   = '0%';
+    document.getElementById('rxProgPct').textContent    = '0%';
+    document.getElementById('rxProgSpeed').textContent  = '—';
+    document.getElementById('rxProgEta').textContent    = 'ETA: —';
+
+    const canStream = !!(downloadDir && window.showDirectoryPicker);
+    if (canStream) {
+      try {
+        const perm = await downloadDir.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          const fh = await downloadDir.getFileHandle(displayName, { create: true });
+          rx.writable  = await fh.createWritable();
+          rx.streaming = true;
+        }
+      } catch(e) { log(`Can't stream to disk, using memory: ${e.message}`, 'warn'); }
+    }
+    log(`Receiving ${displayName} from ${stationName(fromId)}…` + (rx.streaming ? ' (streaming to disk)' : ''), 'info');
+
+  } else if (data.type === 'file_done') {
+    const rx = rxState[fromId];
+    if (!rx) return;
+    delete rxState[fromId];
+    const displayName = rx.meta.filename.split('/').pop();
+
+    // Complete RX progress bar then hide
+    document.getElementById('rxProgFill').style.width = '100%';
+    document.getElementById('rxProgPct').textContent  = '100%';
+    setTimeout(() => { document.getElementById('rxProgWrap').style.display = 'none'; }, 1500);
+
+    if (rx.failed) {
+      try { await rx.writable?.abort(); } catch(e) {}
+      log(`Transfer of ${displayName} failed while saving.`, 'err');
+      return;
+    }
+
+    const dt  = (Date.now() - rx.t0) / 1000;
+    const spd = dt > 0 ? fmtSize(rx.bytes / dt) + '/s' : '—';
+
+    if (rx.streaming) {
+      try { await rx.writeChain; await rx.writable.close(); } catch(e) { log(`Finalize error: ${e.message}`, 'err'); return; }
+      conns[fromId]?.send({ type: 'file_ack', filename: rx.meta.filename });
+      addToInbox(rx.meta.filename, fromId, null, spd);
+      log(`Received & saved ${displayName} → ${downloadDir.name} at avg ${spd}.`, 'ok');
+    } else {
+      const blob = new Blob(rx.chunks, { type: rx.meta.mime });
+      conns[fromId]?.send({ type: 'file_ack', filename: rx.meta.filename });
+      addToInbox(rx.meta.filename, fromId, blob, spd);
+      log(`Received ${displayName} at avg ${spd}.`, 'ok');
+    }
+
+  } else if (data.type === 'file_ack') {
+    const pa = pendingAcks[data.filename];
+    if (pa) {
+      pa.statusEl.textContent = '✓ Delivered';
+      pa.statusEl.className   = 'fq-status done';
+      log(`Delivery confirmed: ${data.filename}`, 'ok');
+      delete pendingAcks[data.filename];
+    }
+
+  } else if (data.type === 'names_update') {
+    applyNames(data.stations);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILE SELECTION
+══════════════════════════════════════════════════════════ */
+function selectTarget(stId) {
+  selectedTarget = stId;
+  document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('db_' + stId);
+  if (btn) btn.classList.add('active');
+  checkSendReady();
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.add('drag-active');
+}
+function onDragLeave() {
+  document.getElementById('dropZone').classList.remove('drag-active');
+}
+async function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag-active');
+  const files = await extractDropFiles(e.dataTransfer.items);
+  if (files.length) setFiles(files);
+}
+function onFileSelected(e) {
+  if (e.target.files.length) setFiles(Array.from(e.target.files));
+  e.target.value = '';
+}
+
+async function extractDropFiles(items) {
+  const files = [], queue = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.();
+    if (entry) queue.push(entry);
+  }
+  while (queue.length) {
+    const entry = queue.shift();
+    if (entry.isFile) {
+      const f = await new Promise(res => entry.file(res));
+      files.push(f);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const entries = await new Promise(res => reader.readEntries(res));
+      queue.push(...entries);
+    }
+  }
+  return files;
+}
+
+function setFiles(files) {
+  selectedFiles = files;
+  const qEl = document.getElementById('fileQueue');
+  const dz  = document.getElementById('dropZone');
+  const cnt = document.getElementById('dzCount');
+
+  qEl.innerHTML = '';
+  qEl.style.display = files.length ? 'block' : 'none';
+  dz.classList.toggle('has-files', files.length > 0);
+  cnt.style.display = files.length ? 'block' : 'none';
+  cnt.textContent = `${files.length} file${files.length > 1 ? 's' : ''} queued — ${fmtSize(files.reduce((a,f)=>a+f.size,0))}`;
+
+  files.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'fq-item';
+    const name = f.webkitRelativePath || f.name;
+    row.innerHTML = `
+      <span class="fq-type">${fileExt(name)}</span>
+      <span class="fq-name" title="${name}">${name}</span>
+      <span class="fq-size">${fmtSize(f.size)}</span>
+      <span class="fq-status pending">Pending</span>
+    `;
+    qEl.appendChild(row);
+  });
+
+  checkSendReady();
+}
+
+function checkSendReady() {
+  document.getElementById('sendBtn').disabled =
+    !(selectedFiles.length > 0 && selectedTarget && conns[selectedTarget]?.open);
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILE SEND — GB-OPTIMISED PIPELINE
+══════════════════════════════════════════════════════════ */
+async function sendFiles() {
+  if (!selectedFiles.length || !selectedTarget || !conns[selectedTarget]?.open) return;
+
+  const c       = conns[selectedTarget];
+  const statusEls = [...document.querySelectorAll('.fq-status')];
+
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('progWrap').style.display = 'block';
+
+  let t0Speed = Date.now(), bytesSinceSpeed = 0;
+
+  for (let fIdx = 0; fIdx < selectedFiles.length; fIdx++) {
+    const file   = selectedFiles[fIdx];
+    const fname  = file.webkitRelativePath || file.name;
+    const stEl   = statusEls[fIdx];
+
+    if (stEl) { stEl.textContent = 'Sending…'; stEl.className = 'fq-status sending'; }
+
+    // Track status element only — no timers, no timeouts
+    pendingAcks[fname] = { statusEl: stEl };
+
+    c.send({ type: 'file_meta', filename: fname, size: file.size, mime: file.type });
+    log(`TX [${fIdx+1}/${selectedFiles.length}] ${fname} → ${stationName(selectedTarget)} (${fmtSize(file.size)})`, 'info');
+
+    let offset = 0;
+    const readAhead = [];
+    const tStart = Date.now();
+
+    function readChunk(off) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload  = e => res(e.target.result);
+        r.onerror = rej;
+        r.readAsArrayBuffer(file.slice(off, off + CHUNK_SIZE));
+      });
+    }
+    function waitDrain() {
+      return new Promise(res => {
+        const dc = c.dataChannel;
+        if (!dc || dc.bufferedAmount <= MAX_BUFFERED) { res(); return; }
+        const chk = () => dc.bufferedAmount <= MAX_BUFFERED ? res() : setTimeout(chk, DRAIN_MS);
+        setTimeout(chk, DRAIN_MS);
+      });
+    }
+    function enqRead() {
+      const off = offset + readAhead.length * CHUNK_SIZE;
+      if (off < file.size && readAhead.length < PIPELINE) readAhead.push(readChunk(off));
+    }
+    for (let i = 0; i < PIPELINE; i++) enqRead();
+
+    try {
+      while (offset < file.size) {
+        // Only drain when buffer is truly full — don't drain on every chunk
+        await waitDrain();
+
+        // Blast CHUNKS_PER_TICK chunks in one shot without yielding
+        for (let t = 0; t < CHUNKS_PER_TICK && offset < file.size; t++) {
+          if (readAhead.length === 0) break;
+          const chunk = await readAhead.shift();
+          c.send(chunk); // send raw ArrayBuffer — no MessagePack overhead, matches AERO_FLY speed
+          offset         += chunk.byteLength;
+          txSpeedBytes   += chunk.byteLength;
+          sessionTxBytes += chunk.byteLength;
+          bytesSinceSpeed+= chunk.byteLength;
+          lastSeen[selectedTarget] = Date.now();
+          enqRead();
+        }
+
+        const pct = Math.round(offset / file.size * 100);
+        document.getElementById('progFill').style.width = pct + '%';
+        document.getElementById('progPct').textContent  = pct + '%';
+        document.getElementById('progFile').textContent = `[${fIdx+1}/${selectedFiles.length}] ${fname}`;
+
+        // Live speed in progress bar
+        const now = Date.now();
+        if (now - t0Speed >= 500) {
+          const spd = bytesSinceSpeed / ((now - t0Speed) / 1000);
+          document.getElementById('progSpeed').textContent = fmtSize(spd) + '/s';
+          const rem = file.size - offset;
+          document.getElementById('progEta').textContent = 'ETA: ' + fmtETA(rem, spd);
+          bytesSinceSpeed = 0; t0Speed = now;
+        }
+      }
+      c.send({ type: 'file_done' });
+      const elapsed = (Date.now() - tStart) / 1000;
+      const avgSpd  = elapsed > 0 ? fmtSize(file.size / elapsed) + '/s' : '—';
+      log(`Sent ${fname} — avg ${avgSpd}. Waiting for delivery confirmation…`, 'ok');
+
+    } catch (err) {
+      log(`Error sending ${fname}: ${err.message}`, 'err');
+      if (stEl) { stEl.textContent = '✗ Failed'; stEl.className = 'fq-status failed'; }
+      delete pendingAcks[fname];
+      break;
+    }
+  }
+
+  setTimeout(() => {
+    document.getElementById('progWrap').style.display = 'none';
+    document.getElementById('progFill').style.width = '0%';
+  }, 1200);
+  document.getElementById('sendBtn').disabled = false;
+  selectedFiles = [];
+}
+
+/* ══════════════════════════════════════════════════════════
+   INBOX + AUTO-SAVE
+══════════════════════════════════════════════════════════ */
+async function addToInbox(filename, fromId, blob, speed) {
+  const list  = document.getElementById('inboxList');
+  const empty = list.querySelector('.inbox-empty');
+  if (empty) empty.remove();
+
+  const item = document.createElement('div');
+  item.className = 'inbox-item new-file';
+  const displayName = filename.split('/').pop();
+  const sizeLabel = blob ? fmtSize(blob.size) : 'saved to disk';
+
+  item.innerHTML = `
+    <span class="ii-type">${fileExt(displayName)}</span>
+    <div class="ii-info">
+      <div class="ii-name">${displayName}</div>
+      <div class="ii-meta">From <strong>${stationName(fromId)}</strong> · ${sizeLabel} · ${speed}</div>
+    </div>
+    ${blob ? '<button class="ii-save">↓ Save</button>' : '<span style="font-size:.68rem;color:var(--green)">✓ Saved</span>'}
+  `;
+  if (blob) item.querySelector('.ii-save').onclick = () => saveFileLocally(blob, displayName);
+  list.prepend(item);
+
+  // Auto-save only if not already streamed to disk
+  if (blob) await saveFileLocally(blob, displayName);
+
+  // Keep inbox manageable
+  const items = list.querySelectorAll('.inbox-item');
+  if (items.length > 15) items[items.length - 1].remove();
+}
+
+async function saveFileLocally(blob, filename) {
+  if (downloadDir) {
+    try {
+      const fh  = await downloadDir.getFileHandle(filename, { create: true });
+      const w   = await fh.createWritable();
+      await w.write(blob);
+      await w.close();
+      log(`Auto-saved: ${filename}`, 'ok');
+      return;
+    } catch(e) { log(`Auto-save failed, using browser download: ${e.message}`, 'warn'); }
+  }
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function setDownloadLocation() {
+  try {
+    downloadDir = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const label = downloadDir.name;
+    document.getElementById('saveLocLabel').textContent = '✓ ' + label;
+    document.getElementById('saveLocBtn').classList.add('set');
+    document.getElementById('topSaveBtn').classList.add('active');
+    log('Auto-save folder: ' + label, 'ok');
+  } catch(e) { log('Save folder not set.', 'warn'); }
+}
+
+function clearInbox() {
+  document.getElementById('inboxList').innerHTML = `
+    <div class="inbox-empty">
+      <span class="ie-icon">📭</span>
+      No files received yet.<br>
+      <span style="font-size:.75rem">Transfers will appear here instantly.</span>
+    </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS
+══════════════════════════════════════════════════════════ */
+function saveNames() {
+  stations.forEach(st => {
+    const inp = document.getElementById('ne_' + st.id);
+    if (inp) st.name = inp.value.trim() || st.name;
+  });
+  localStorage.setItem('nl_stations', JSON.stringify(stations));
+  Object.values(conns).forEach(c => { if (c.open) c.send({ type:'names_update', stations }); });
+  refreshUI();
+  log('Names saved and broadcast.', 'ok');
+}
+
+function applyNames(incoming) {
+  incoming.forEach((s, i) => { if (stations[i]) stations[i].name = s.name; });
+  localStorage.setItem('nl_stations', JSON.stringify(stations));
+  refreshUI();
+  log('Station names updated from network.', 'info');
+}
+
+function refreshUI() {
+  buildSidebar(); buildDestGrid(); buildNetGrid(); buildNameEditors();
+  document.getElementById('pillName').textContent = stations.find(s=>s.id===myStation.id)?.name || myStation.name;
+  onlineSet.forEach(id => setOnline(id, true));
+}
+
+function toggleSettings() { document.getElementById('settingsPanel').classList.toggle('open'); }
+function toggleLight() { /* Light theme is default — no toggle needed */ }
+function resetStation()   { localStorage.removeItem('nl_mystation'); location.reload(); }
+
+/* ══════════════════════════════════════════════════════════
+   LIVE SPEED METER
+══════════════════════════════════════════════════════════ */
+function updateSpeed() {
+  const now = Date.now();
+  const dt  = (now - lastSpeedTime) / 1000;
+  if (dt <= 0) return;
+
+  const txSpd = txSpeedBytes / dt;
+  const rxSpd = rxSpeedBytes / dt;
+
+  document.getElementById('smTx').textContent   = txSpd > 0 ? fmtSize(txSpd) + '/s' : '—';
+  document.getElementById('smRx').textContent   = rxSpd > 0 ? fmtSize(rxSpd) + '/s' : '—';
+  document.getElementById('smSent').textContent = fmtSize(sessionTxBytes);
+  document.getElementById('smRecv').textContent = fmtSize(sessionRxBytes);
+
+  txSpeedBytes = 0; rxSpeedBytes = 0; lastSpeedTime = now;
+}
+
+/* ══════════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════════ */
+function stationName(id) { return stations.find(s => s.id === id)?.name || id; }
+
+function fileExt(name) {
+  const ext = (name.split('.').pop() || '').toUpperCase().slice(0, 4);
+  return ext || 'FILE';
+}
+
+function fmtSize(b) {
+  if (!b && b !== 0) return '—';
+  if (b < 1024)         return b + ' B';
+  if (b < 1048576)      return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1073741824)   return (b / 1048576).toFixed(1) + ' MB';
+  return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function fmtETA(remaining, bps) {
+  if (!bps || bps < 100) return '—';
+  const s = remaining / bps;
+  if (s < 60)   return Math.ceil(s) + 's';
+  if (s < 3600) return Math.ceil(s / 60) + 'm';
+  return (s / 3600).toFixed(1) + 'h';
+}
+
+/* ══════════════════════════════════════════════════════════
+   BOOT
+══════════════════════════════════════════════════════════ */
+
+
+stations = JSON.parse(localStorage.getItem('nl_stations') || 'null') || DEFAULT_STATIONS.map(s=>({...s}));
+
+const savedStation = localStorage.getItem('nl_mystation');
+if (savedStation) {
+  myStation = JSON.parse(savedStation);
+  // Sync to current station list
+  myStation = stations.find(s => s.id === myStation.id) || myStation;
+  document.getElementById('adminOverlay').classList.add('hidden');
+  launchApp();
+} else {
+  buildAdminGrid();
+}
+</script>
+</body>
+</html>
