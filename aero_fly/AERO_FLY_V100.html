@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AERO_TX // 8-BIT PROTOCOL</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000000;
+    --fg: #ffffff;
+    --border-thickness: 4px;
+    --font-pixel: 'Press Start 2P', monospace;
+  }
+  body.light-mode { --bg: #ffffff; --fg: #000000; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-pixel);
+    background-color: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    overflow-x: hidden;
+    -webkit-font-smoothing: none;
+  }
+
+  #bgCanvas {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: -1; opacity: 0.1;
+    pointer-events: none; image-rendering: pixelated;
+  }
+
+  .app-header {
+    width: 100%; max-width: 1050px;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: var(--border-thickness) solid var(--fg);
+    padding-bottom: 1rem; margin-bottom: 1.5rem;
+  }
+  .brand-text h1 { font-size: 2rem; line-height: 1.2; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .brand-text p  { font-size: 0.6rem; letter-spacing: 2px; }
+
+  .theme-toggle {
+    background: var(--bg); color: var(--fg);
+    border: var(--border-thickness) solid var(--fg);
+    width: 48px; height: 48px; cursor: pointer;
+    box-shadow: 4px 4px 0 var(--fg);
+    transition: transform 0.1s, box-shadow 0.1s;
+    font-family: var(--font-pixel); font-size: 1.2rem;
+  }
+  .theme-toggle:active { transform: translate(4px,4px); box-shadow: 0 0 0 var(--fg); }
+
+  button {
+    cursor: pointer; font-family: var(--font-pixel);
+    background: var(--bg); color: var(--fg);
+    border: var(--border-thickness) solid var(--fg);
+    box-shadow: 6px 6px 0 var(--fg);
+    transition: transform 0.1s, box-shadow 0.1s, background 0.1s, color 0.1s;
+    text-transform: uppercase;
+  }
+  button:active  { transform: translate(6px,6px); box-shadow: 0 0 0 var(--fg); }
+  button:hover   { background: var(--fg); color: var(--bg); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: 6px 6px 0 var(--fg); }
+  button:disabled:hover { background: var(--bg); color: var(--fg); }
+
+  button.outline { background: transparent; box-shadow: none; border: 2px dashed var(--fg); }
+  button.outline:hover { background: var(--fg); color: var(--bg); }
+
+  .dashboard {
+    width: 100%; max-width: 1050px;
+    display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem;
+  }
+  @media (max-width: 880px) { .dashboard { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--bg); border: var(--border-thickness) solid var(--fg);
+    padding: 1.5rem; position: relative;
+  }
+  .panel::before, .panel::after {
+    content: ''; position: absolute; width: 12px; height: 12px; background: var(--bg);
+  }
+  .panel::before { top:-4px; left:-4px; border-right: var(--border-thickness) solid var(--fg); border-bottom: var(--border-thickness) solid var(--fg); }
+  .panel::after  { bottom:-4px; right:-4px; border-left: var(--border-thickness) solid var(--fg); border-top: var(--border-thickness) solid var(--fg); }
+
+  .panel-header {
+    font-size: 0.7rem; text-transform: uppercase;
+    border-bottom: 2px dashed var(--fg); padding-bottom: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between;
+  }
+
+  /* NODE panel */
+  .id-display {
+    border: var(--border-thickness) solid var(--fg);
+    padding: 1.5rem; text-align: center; margin-bottom: 1rem;
+  }
+  .id-display-label { font-size: 0.6rem; margin-bottom: 1rem; }
+  .id-value { font-size: 1.5rem; }
+  .copy-btn { font-size: 0.6rem; padding: 0.8rem; margin-top: 1.5rem; width: 100%; }
+
+  .input-group label { display: block; font-size: 0.6rem; margin-bottom: 0.8rem; }
+  .input-action-wrapper { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; }
+  .input-action-wrapper input {
+    background: var(--bg); color: var(--fg);
+    border: var(--border-thickness) solid var(--fg);
+    font-family: var(--font-pixel); font-size: 1rem;
+    text-align: center; padding: 1rem; outline: none; width: 100%;
+  }
+  .input-action-wrapper input:focus { background: var(--fg); color: var(--bg); }
+  .input-action-wrapper input::placeholder { color: var(--fg); opacity: 0.3; }
+  .input-action-wrapper button { padding: 1rem; font-size: 0.8rem; }
+
+  .status-indicator {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem; border: var(--border-thickness) solid var(--fg); font-size: 0.6rem;
+  }
+  .status-dot { width: 16px; height: 16px; border: var(--border-thickness) solid var(--fg); }
+
+  @keyframes blinkRetro { 0%,49%{background:var(--fg)} 50%,100%{background:transparent} }
+  @keyframes blinkWarn  { 0%,49%{background:var(--fg)} 50%,100%{background:transparent} }
+
+  .status-indicator.connected .status-dot  { animation: blinkRetro 1s infinite; }
+  .status-indicator.connecting .status-dot { animation: blinkWarn 0.6s infinite; }
+
+  .log-terminal {
+    height: 110px; margin-top: 1rem; border: var(--border-thickness) solid var(--fg);
+    padding: 1rem; font-size: 0.55rem; line-height: 1.9; overflow-y: auto;
+  }
+  .log .entry { display: block; }
+  .log .entry::before { content: '>'; margin-right: 8px; }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: var(--border-thickness) dashed var(--fg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative; cursor: pointer;
+    min-height: 160px; padding: 1.5rem; text-align: center;
+  }
+  .drop-zone.disabled { opacity: 0.2; pointer-events: none; }
+  .drop-zone.hover    { background: var(--fg); color: var(--bg); }
+  .drop-zone.has-file { border-style: solid; }
+
+  .dz-icon     { font-size: 1.5rem; white-space: pre; margin-bottom: 1rem; line-height: 1; }
+  .dz-title    { font-size: 1rem; margin-bottom: 0.7rem; }
+  .dz-subtitle { font-size: 0.55rem; line-height: 1.8; }
+
+  #fileInput   { position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; width:100%; }
+  #folderInput { display:none; }
+
+  /* VIRTUAL EXPLORER (NAS MODE) */
+  .explorer-section { display: none; margin-bottom: 1rem; border: var(--border-thickness) solid var(--fg); padding: 1rem; }
+  .explorer-header { font-size: 0.6rem; border-bottom: 2px dashed var(--fg); padding-bottom: 0.8rem; margin-bottom: 0.8rem; color: var(--fg); animation: blinkRetro 2s infinite; }
+  .explorer-list { max-height: 250px; overflow-y: auto; }
+  .exp-item {
+    display: flex; justify-content: space-between; padding: 0.6rem;
+    font-size: 0.55rem; cursor: pointer; border-bottom: 1px dashed var(--fg);
+  }
+  .exp-item:hover { background: var(--fg); color: var(--bg); }
+  .exp-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 1rem; }
+  .exp-size { opacity: 0.7; white-space: nowrap; }
+
+  /* FILE QUEUE */
+  .queue-section { margin-top: 1.2rem; }
+  .queue-header  {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.6rem; border-bottom: 2px dashed var(--fg);
+    padding-bottom: 0.6rem; margin-bottom: 0.8rem;
+  }
+  .queue-clear-btn { font-size: 0.5rem; padding: 0.4rem 0.7rem; box-shadow: 3px 3px 0 var(--fg); }
+
+  .queue-list { max-height: 220px; overflow-y: auto; border: var(--border-thickness) solid var(--fg); display: none; }
+  .queue-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 0.5rem; padding: 0.7rem 0.8rem; font-size: 0.52rem; border-bottom: 2px dashed var(--fg); }
+  .queue-item:last-child { border-bottom: none; }
+  .qi-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.5; }
+  .qi-path { font-size: 0.42rem; opacity: 0.5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .qi-size { font-size: 0.5rem; white-space: nowrap; opacity: 0.7; }
+  .qi-status { font-size: 0.5rem; white-space: nowrap; padding: 0.2rem 0.4rem; border: 2px solid var(--fg); }
+  .qi-status.sending { animation: blinkRetro 0.5s infinite; }
+
+  /* Global progress */
+  .progress-container { border: var(--border-thickness) solid var(--fg); padding: 1.2rem; display: none; margin-top: 1rem; }
+  .progress-header    { display: flex; justify-content: space-between; font-size: 0.55rem; margin-bottom: 1rem; gap: 0.5rem; }
+  .progress-label-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+  .progress-track     { height: 24px; border: var(--border-thickness) solid var(--fg); padding: 2px; }
+  .progress-fill { height: 100%; width: 0%; background-image: linear-gradient(to right, var(--fg) 80%, transparent 20%); background-size: 20px 100%; transition: width 0.1s steps(10, end); }
+
+  /* INCOMING */
+  .incoming-alert { border: var(--border-thickness) solid var(--fg); padding: 1.5rem; margin-bottom: 1.5rem; display: none; box-shadow: 8px 8px 0 var(--fg); }
+  .alert-title  { font-size: 0.6rem; margin-bottom: 1.5rem; border-bottom: 2px dashed var(--fg); padding-bottom: 1rem; }
+  .alert-file   { font-size: 0.85rem; word-break: break-all; margin-bottom: 0.5rem; line-height: 1.4; }
+  .alert-meta   { font-size: 0.6rem; opacity: 0.7; margin-bottom: 0.4rem; }
+  .alert-actions { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.2rem; }
+  .alert-actions button { padding: 1rem; font-size: 0.7rem; }
+
+  /* CONTROLS */
+  .transfer-controls { margin-top: 1.2rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  .folder-btn  { flex: 1; padding: 0 1rem; height: 50px; font-size: 0.6rem; }
+  button.mount-btn { flex: 1; height: 50px; font-size: 0.6rem; background: transparent; border: 2px dashed var(--fg); box-shadow: none; }
+  button.mount-btn:hover { background: var(--fg); color: var(--bg); }
+  button.send-btn { flex: 100%; height: 50px; font-size: 0.9rem; }
+
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<header class="app-header">
+  <div class="brand-text">
+    <h1>AERO_FLY</h1>
+    <p>Powered by CHRONEX SYSTEMS</p>
+  </div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()"><span id="themeIcon">*</span></button>
+</header>
+
+<main class="dashboard">
+
+  <section class="panel">
+    <div class="panel-header">[ NODE.DAT ]</div>
+
+    <div class="id-display">
+      <div class="id-display-label">YOUR_HOST_ID</div>
+      <div class="id-value" id="myId">----</div>
+      <button class="copy-btn" onclick="copyId()">[ COPY ID ]</button>
+    </div>
+
+    <div class="input-group">
+      <label>TARGET_PEER_ID</label>
+      <div class="input-action-wrapper">
+        <input type="text" id="peerId" placeholder="0000-0000" maxlength="9" oninput="formatInput(this)" />
+        <button id="connectBtn" onclick="connectToPeer()" disabled>LINK START &gt;</button>
+      </div>
+    </div>
+
+    <div class="status-indicator idle" id="statusBox">
+      <span id="statusText">NO SIGNAL</span>
+      <div class="status-dot"></div>
+    </div>
+
+    <div class="log-terminal log" id="log"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><span>[ PAYLOAD.EXE ]</span> <span id="nasStatus"></span></div>
+
+    <div class="incoming-alert" id="incomingBanner">
+      <div class="alert-title">!! INBOUND DATA REQUEST !!</div>
+      <div class="alert-file" id="incomingName">UNKNOWN.FILE</div>
+      <div class="alert-meta" id="incomingMeta"></div>
+      <div class="alert-actions">
+        <button onclick="acceptFile()">[ ACCEPT ]</button>
+        <button onclick="declineFile()">[ DECLINE ]</button>
+      </div>
+    </div>
+
+    <div class="explorer-section" id="explorerSection">
+      <div class="explorer-header" id="expTitle">MOUNTED VOLUME</div>
+      <div class="explorer-list" id="expList"></div>
+    </div>
+
+    <div class="drop-zone disabled" id="dropZone"
+         ondragover="onDragOver(event)"
+         ondragleave="onDragLeave(event)"
+         ondrop="onDrop(event)">
+      <input type="file" id="fileInput" multiple onchange="onFileSelected(event)" />
+      <div class="dz-icon"> [ _ ]
+/___/|
+|   ||
+|___|/</div>
+      <div class="dz-title">INSERT PAYLOAD</div>
+      <div class="dz-subtitle">DRAG FILES OR FOLDER HERE<br>— OR — CLICK TO BROWSE MULTI-FILE</div>
+    </div>
+
+    <input type="file" id="folderInput" webkitdirectory multiple onchange="onFolderSelected(event)" />
+
+    <div class="transfer-controls">
+      <button class="folder-btn" id="folderBtn" onclick="document.getElementById('folderInput').click()" disabled>+ FOLDER</button>
+      <button class="mount-btn" id="mountBtn" onclick="mountRemoteDrive()" disabled>[ MOUNT USB ]</button>
+      <button class="send-btn" id="sendBtn" disabled onclick="startQueue()">EXECUTE TX &gt;&gt;</button>
+    </div>
+
+    <div class="queue-section" id="queueSection" style="display:none">
+      <div class="queue-header">
+        <span id="queueTitle">QUEUE: 0 FILES</span>
+        <button class="queue-clear-btn" onclick="clearQueue()">[ CLEAR ]</button>
+      </div>
+      <div class="queue-list" id="queueList"></div>
+    </div>
+
+    <div class="progress-container" id="progressWrap">
+      <div class="progress-header">
+        <span class="progress-label-text" id="progressLabel">LOADING...</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<script>
+  /* ====== CANVAS ====== */
+  const canvas = document.getElementById('bgCanvas');
+  const ctx    = canvas.getContext('2d');
+  const PIXEL_SIZE = 32;
+  let gridCols, gridRows, activePixels = [];
+
+  function resizeCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gridCols = Math.ceil(canvas.width  / PIXEL_SIZE);
+    gridRows = Math.ceil(canvas.height / PIXEL_SIZE);
+  }
+  function initPixels() {
+    activePixels = [];
+    const count = Math.floor(gridCols * gridRows * 0.05);
+    for (let i = 0; i < count; i++)
+      activePixels.push({ x: Math.floor(Math.random()*gridCols), y: Math.floor(Math.random()*gridRows), life: Math.random()*50 });
+  }
+  function animateCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const isLight = document.body.classList.contains('light-mode');
+    ctx.fillStyle = isLight ? '#000' : '#fff';
+    for (let p of activePixels) {
+      if (--p.life <= 0) {
+        p.x = Math.floor(Math.random()*gridCols);
+        p.y = Math.floor(Math.random()*gridRows);
+        p.life = Math.random()*50+10;
+      }
+      ctx.fillRect(p.x*PIXEL_SIZE, p.y*PIXEL_SIZE, PIXEL_SIZE-2, PIXEL_SIZE-2);
+    }
+    setTimeout(() => requestAnimationFrame(animateCanvas), 1000/15);
+  }
+  window.addEventListener('resize', () => { resizeCanvas(); initPixels(); });
+  resizeCanvas(); initPixels(); animateCanvas();
+
+  /* ====== THEME ====== */
+  function toggleTheme() {
+    const isLight = document.body.classList.toggle('light-mode');
+    document.getElementById('themeIcon').textContent = isLight ? '#' : '*';
+    localStorage.setItem('aero_theme', isLight ? 'light' : 'dark');
+  }
+  if (localStorage.getItem('aero_theme') === 'light') {
+    document.body.classList.add('light-mode');
+    document.getElementById('themeIcon').textContent = '#';
+  }
+
+  /* ====== TRANSFER CORE ====== */
+  const CHUNK_SIZE         = 256 * 1024;
+  const MAX_BUFFERED_AMOUNT = 2 * 1024 * 1024;
+
+  let peer, conn;
+  let fileQueue   = [];
+  let queueIndex  = 0;   
+  let isSending   = false;
+
+  let incomingQueue  = [];   
+  let rxMeta         = null;
+  let rxChunks       = [];
+  let rxBytes        = 0;
+  let rxBatchTotal   = 0;
+  let rxBatchReceived = 0;
+
+  // NAS Host Memory
+  let hostedFileHandles = new Map(); 
+
+  function log(msg, type = '') {
+    const el  = document.getElementById('log');
+    const entry = document.createElement('span');
+    entry.className = 'entry ' + type;
+    const ts = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    entry.textContent = `[${ts}] ${msg}`;
+    el.appendChild(entry);
+    el.appendChild(document.createElement('br'));
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setStatus(text, type) {
+    const box = document.getElementById('statusBox');
+    box.className = 'status-indicator ' + type;
+    document.getElementById('statusText').textContent = text;
+  }
+
+  function generateId() { return Math.floor(1000 + Math.random()*9000) + '-' + Math.floor(1000 + Math.random()*9000); }
+  function formatId(raw) { const d = raw.replace(/\D/g,'').slice(0,8); return d.length > 4 ? d.slice(0,4)+'-'+d.slice(4) : d; }
+  function formatInput(el) { el.value = formatId(el.value); document.getElementById('connectBtn').disabled = el.value.replace('-','').length < 8; }
+  function copyId() { navigator.clipboard.writeText(document.getElementById('myId').textContent).then(() => log('Room ID copied.', 'info')); }
+
+  function initPeer() {
+    const id = generateId();
+    document.getElementById('myId').textContent = id;
+    peer = new Peer(id, { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }});
+    peer.on('open', () => { log('Ready. ID: ' + id, 'ok'); document.getElementById('connectBtn').disabled = false; });
+    peer.on('connection', c => { conn = c; setupConn(); log('Incoming peer connection.', 'info'); });
+    peer.on('error', err => { log('Error: ' + err.message, 'err'); setStatus('SYS HALT', 'error'); });
+  }
+
+  function connectToPeer() {
+    const peerId = document.getElementById('peerId').value.replace(/\s/g,'');
+    if (!peerId) return;
+    setStatus('SYNCING...', 'connecting');
+    log('Connecting to ' + peerId + '…');
+    conn = peer.connect(peerId, { reliable: true });
+    setupConn();
+  }
+
+  function setupConn() {
+    conn.on('open', () => {
+      setStatus('LINK ACTIVE', 'connected');
+      log('Link established ✓', 'ok');
+      document.getElementById('dropZone').classList.remove('disabled');
+      document.getElementById('folderBtn').disabled = false;
+      document.getElementById('mountBtn').disabled = false;
+    });
+
+    conn.on('data', handleData);
+
+    conn.on('close', () => {
+      setStatus('NO SIGNAL', 'idle');
+      log('Connection closed.', 'err');
+      document.getElementById('dropZone').classList.add('disabled');
+      document.getElementById('folderBtn').disabled = true;
+      document.getElementById('mountBtn').disabled = true;
+      document.getElementById('sendBtn').disabled = true;
+      document.getElementById('explorerSection').style.display = 'none';
+      document.getElementById('dropZone').style.display = 'flex';
+      hostedFileHandles.clear();
+    });
+  }
+
+  /* ====== RECEIVE SIDE & NAS COMMANDS ====== */
+  function handleData(data) {
+    if (data.type === 'batch_start') {
+      rxBatchTotal = data.count; rxBatchReceived = 0;
+      document.getElementById('incomingName').textContent = `${data.count} FILE(S)`;
+      document.getElementById('incomingMeta').textContent = `TOTAL: ${fmtSize(data.totalSize)}`;
+      document.getElementById('incomingBanner').style.display = 'block';
+
+    } else if (data.type === 'meta') {
+      incomingQueue.push(data);
+      if (incomingQueue.length === 1) receiveNextFile();
+
+    } else if (data.type === 'chunk') {
+      rxChunks.push(data.chunk);
+      rxBytes += data.chunk.byteLength;
+      const pct = Math.round((rxBytes / rxMeta.size) * 100);
+      showProgress(pct, `RX: ${rxMeta.name} ${pct}%`);
+
+    } else if (data.type === 'file_done') {
+      const blob = new Blob(rxChunks, { type: rxMeta.mime });
+      downloadBlob(blob, rxMeta.name);
+      log(`Received: ${rxMeta.relativePath || rxMeta.name}`, 'ok');
+      rxBatchReceived++;
+      incomingQueue.shift();
+      rxMeta = null; rxChunks = []; rxBytes = 0;
+      if (incomingQueue.length > 0) receiveNextFile();
+      else { hideProgress(); log('Download complete ✓', 'ok'); }
+
+    } else if (data.type === 'accept') {
+      log('Peer accepted.', 'info');
+      sendNextInQueue();
+
+    } else if (data.type === 'dir_map') {
+      /* NAS: Receiving Virtual Directory Map */
+      renderRemoteDrive(data.name, data.tree);
+
+    } else if (data.type === 'req_file') {
+      /* NAS: Host receiving request to stream a specific file */
+      log(`Peer requested NAS fetch: ${data.path}`, 'info');
+      streamHostedFile(data.path);
+    }
+  }
+
+  /* ====== NAS HOST FUNCTIONS ====== */
+  async function mountRemoteDrive() {
+    if (!window.showDirectoryPicker) {
+      alert("Your browser does not support the File System Access API. Please use a modern Chromium-based browser (Chrome/Edge).");
+      return;
+    }
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      log(`Scanning volume: ${dirHandle.name}...`, 'info');
+      hostedFileHandles.clear();
+      const fileTree = [];
+      
+      // Recursively walk the USB structure
+      await buildDirectoryMap(dirHandle, '', fileTree);
+      
+      log(`Mapped ${fileTree.length} objects. Broadcasting to peer...`, 'ok');
+      document.getElementById('nasStatus').textContent = `[ HOSTING: ${dirHandle.name} ]`;
+      
+      // Send blueprint to peer
+      conn.send({ type: 'dir_map', name: dirHandle.name, tree: fileTree });
+    } catch (e) {
+      if(e.name !== 'AbortError') log('Mount Failed: ' + e.message, 'err');
+    }
+  }
+
+  async function buildDirectoryMap(handle, currentPath, treeArray) {
+    for await (const entry of handle.values()) {
+      const itemPath = currentPath + entry.name;
+      if (entry.kind === 'file') {
+        const file = await entry.getFile();
+        hostedFileHandles.set(itemPath, entry); // Save pointer for later
+        treeArray.push({ name: entry.name, path: itemPath, size: file.size });
+      } else if (entry.kind === 'directory') {
+        await buildDirectoryMap(entry, itemPath + '/', treeArray);
+      }
+    }
+  }
+
+  async function streamHostedFile(path) {
+    const handle = hostedFileHandles.get(path);
+    if (!handle) return log('File vanished from volume.', 'err');
+    
+    const file = await handle.getFile();
+    log(`Streaming NAS payload: ${file.name}...`, 'info');
+    
+    // Transmit as a single-file batch
+    conn.send({
+      type: 'meta', name: file.name, relativePath: path, size: file.size, mime: file.type
+    });
+    
+    await sendChunks(file, `TX NAS: ${file.name}`);
+    conn.send({ type: 'file_done' });
+    log(`NAS Stream Complete: ${file.name}`, 'ok');
+    hideProgress();
+  }
+
+  /* ====== NAS CLIENT FUNCTIONS ====== */
+  function renderRemoteDrive(volumeName, tree) {
+    document.getElementById('dropZone').style.display = 'none';
+    const exp = document.getElementById('explorerSection');
+    exp.style.display = 'block';
+    document.getElementById('expTitle').textContent = `VOLUME: [ ${volumeName} ]`;
+    
+    const list = document.getElementById('expList');
+    list.innerHTML = '';
+    
+    // Sort alphabetically
+    tree.sort((a,b) => a.path.localeCompare(b.path));
+
+    tree.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'exp-item';
+      row.innerHTML = `<span class="exp-name">${item.path}</span><span class="exp-size">${fmtSize(item.size)}</span>`;
+      
+      // Request file on click
+      row.onclick = () => {
+        log(`Requesting ${item.name} from host...`, 'info');
+        conn.send({ type: 'req_file', path: item.path });
+        showProgress(0, `AWAITING NAS STREAM: ${item.name}`);
+      };
+      list.appendChild(row);
+    });
+    log(`Remote Volume Mounted: ${volumeName}`, 'ok');
+  }
+
+  /* ====== STANDARD TRANSFER LOGIC ====== */
+  function receiveNextFile() {
+    rxMeta = incomingQueue[0]; rxChunks = []; rxBytes = 0;
+    showProgress(0, `RX: ${rxMeta.name}`);
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function acceptFile() { document.getElementById('incomingBanner').style.display = 'none'; conn.send({ type: 'accept' }); }
+  function declineFile() { document.getElementById('incomingBanner').style.display = 'none'; conn.send({ type: 'decline' }); }
+
+  function addFilesToQueueRaw(files) {
+    for (const file of files) {
+      const relPath = file._relativePath || file.webkitRelativePath || file.name;
+      fileQueue.push({ file, relativePath: relPath, status: 'pending', id: Date.now() + Math.random() });
+    }
+    renderQueue();
+  }
+
+  function onFileSelected(e) { addFilesToQueueRaw(Array.from(e.target.files)); e.target.value = ''; }
+  function onFolderSelected(e) { addFilesToQueueRaw(Array.from(e.target.files)); e.target.value = ''; }
+
+  function clearQueue() { if(isSending)return; fileQueue=[]; renderQueue(); document.getElementById('sendBtn').disabled = true; }
+  
+  function renderQueue() {
+    const list = document.getElementById('queueList');
+    if (fileQueue.length === 0) { list.style.display = 'none'; document.getElementById('queueSection').style.display = 'none'; return; }
+    document.getElementById('queueSection').style.display = 'block'; list.style.display = 'block';
+    document.getElementById('queueTitle').textContent = `QUEUE: ${fileQueue.length} FILE(S)`;
+    list.innerHTML = '';
+    fileQueue.forEach(q => {
+      list.innerHTML += `<div class="queue-item" id="qi_${q.id}">
+        <div><div class="qi-name">${q.file.name}</div><div class="qi-path">${q.relativePath}</div></div>
+        <div class="qi-size">${fmtSize(q.file.size)}</div><div class="qi-status ${q.status}" id="qs_${q.id}">WAIT</div>
+      </div>`;
+    });
+    document.getElementById('sendBtn').disabled = false;
+  }
+
+  function startQueue() {
+    if (!conn || fileQueue.length===0 || isSending) return;
+    isSending=true; queueIndex=0; document.getElementById('sendBtn').disabled=true;
+    conn.send({ type: 'batch_start', count: fileQueue.length, totalSize: fileQueue.reduce((a,q)=>a+q.file.size,0) });
+    showProgress(0, 'AWAITING PEER SYNC...');
+  }
+
+  async function sendNextInQueue() {
+    if (queueIndex >= fileQueue.length) { isSending = false; hideProgress(); return; }
+    const item = fileQueue[queueIndex];
+    document.getElementById('qs_'+item.id).textContent = 'TX..';
+    conn.send({ type: 'meta', name: item.file.name, relativePath: item.relativePath, size: item.file.size, mime: item.file.type });
+    await sendChunks(item.file, `TX [${queueIndex+1}/${fileQueue.length}]: ${item.file.name}`);
+    conn.send({ type: 'file_done' });
+    document.getElementById('qs_'+item.id).textContent = 'DONE';
+    queueIndex++;
+    sendNextInQueue();
+  }
+
+  async function sendChunks(file, label) {
+    let offset = 0;
+    const readChunk = off => new Promise(r => { const rd = new FileReader(); rd.onload = e => r(e.target.result); rd.readAsArrayBuffer(file.slice(off, off + CHUNK_SIZE)); });
+    const wait = () => new Promise(r => { const c = () => { if(conn.dataChannel.bufferedAmount <= MAX_BUFFERED_AMOUNT) r(); else setTimeout(c,50); }; setTimeout(c,50); });
+    
+    while(offset < file.size) {
+      await wait();
+      const chunk = await readChunk(offset);
+      conn.send({ type: 'chunk', chunk });
+      offset += chunk.byteLength;
+      showProgress(Math.round((offset/file.size)*100), `${label} ${Math.round((offset/file.size)*100)}%`);
+    }
+  }
+
+  /* ====== UTILS ====== */
+  function showProgress(pct, label) { document.getElementById('progressWrap').style.display = 'block'; document.getElementById('progressLabel').textContent = label; document.getElementById('progressFill').style.width = pct + '%'; }
+  function hideProgress() { document.getElementById('progressFill').style.width = '100%'; setTimeout(() => document.getElementById('progressWrap').style.display='none', 800); }
+  function fmtSize(b) { return b<1024?b+' B':b<1024*1024?(b/1024).toFixed(1)+' KB':b<1024*1024*1024?(b/1024/1024).toFixed(1)+' MB':(b/1024/1024/1024).toFixed(2)+' GB'; }
+  
+  function onDragOver(e){e.preventDefault();document.getElementById('dropZone').classList.add('hover');}
+  function onDragLeave(){document.getElementById('dropZone').classList.remove('hover');}
+  async function onDrop(e){
+    e.preventDefault(); document.getElementById('dropZone').classList.remove('hover');
+    if(!e.dataTransfer.items) return;
+    const files=[], promises=[];
+    for(const item of e.dataTransfer.items) {
+      if(item.kind!=='file') continue;
+      const entry = item.webkitGetAsEntry?item.webkitGetAsEntry():null;
+      if(entry&&entry.isDirectory) promises.push(readDirectory(entry,entry.name,files));
+      else { const f=item.getAsFile(); if(f){f._relativePath=f.name; files.push(f);} }
+    }
+    await Promise.all(promises);
+    if(files.length>0) addFilesToQueueRaw(files);
+  }
+  function readDirectory(dir, path, arr) {
+    return new Promise(res => {
+      const rd=dir.createReader(); let entries=[];
+      const read=()=>{ rd.readEntries(async e=>{ if(e.length===0){ await Promise.all(entries.map(en=>{ if(en.isFile) return new Promise(r=>en.file(f=>{f._relativePath=path+'/'+f.name; arr.push(f); r();})); else if(en.isDirectory) return readDirectory(en,path+'/'+en.name,arr); })); res(); }else{ entries=entries.concat(Array.from(e)); read(); } }); };
+      read();
+    });
+  }
+
+  initPeer();
+</script>
+</body>
+</html>
